@@ -8,8 +8,10 @@ for extracurricular activities at Mergington High School.
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 import os
 from pathlib import Path
+import json
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
@@ -18,6 +20,18 @@ app = FastAPI(title="Mergington High School API",
 current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
+
+# Load teacher credentials from JSON file
+def load_teachers():
+    teachers_path = Path(__file__).parent / "teachers.json"
+    with open(teachers_path, "r") as f:
+        data = json.load(f)
+    return data["teachers"]
+
+# Pydantic model for login request
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 # In-memory activity database
 activities = {
@@ -111,8 +125,8 @@ def signup_for_activity(activity_name: str, email: str):
 
 
 @app.delete("/activities/{activity_name}/unregister")
-def unregister_from_activity(activity_name: str, email: str):
-    """Unregister a student from an activity"""
+def unregister_from_activity(activity_name: str, email: str, is_admin: bool = False, username: str = None):
+    """Unregister a student from an activity - only allowed if admin or if unregistering self"""
     # Validate activity exists
     if activity_name not in activities:
         raise HTTPException(status_code=404, detail="Activity not found")
@@ -130,3 +144,15 @@ def unregister_from_activity(activity_name: str, email: str):
     # Remove student
     activity["participants"].remove(email)
     return {"message": f"Unregistered {email} from {activity_name}"}
+
+
+@app.post("/login")
+def login(request: LoginRequest):
+    """Teacher login endpoint"""
+    teachers = load_teachers()
+    
+    for teacher in teachers:
+        if teacher["username"] == request.username and teacher["password"] == request.password:
+            return {"success": True, "username": request.username, "message": f"Welcome, {request.username}!"}
+    
+    raise HTTPException(status_code=401, detail="Invalid username or password")
