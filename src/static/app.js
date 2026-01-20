@@ -3,6 +3,103 @@ document.addEventListener("DOMContentLoaded", () => {
   const activitySelect = document.getElementById("activity");
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
+  const userIcon = document.getElementById("user-icon");
+  const loginModal = document.getElementById("login-modal");
+  const loginForm = document.getElementById("login-form");
+  const closeLoginBtn = document.getElementById("close-login");
+  const logoutBtn = document.getElementById("logout-btn");
+  const adminPanel = document.getElementById("admin-panel");
+  const currentUserSpan = document.getElementById("current-user");
+  const loginMessageDiv = document.getElementById("login-message");
+
+  let isAdmin = false;
+  let currentUsername = null;
+
+  // User icon click - open login modal
+  userIcon.addEventListener("click", () => {
+    if (isAdmin) {
+      // If already logged in, show logout option
+      logoutBtn.click();
+    } else {
+      loginModal.classList.remove("hidden");
+    }
+  });
+
+  // Close login modal
+  closeLoginBtn.addEventListener("click", () => {
+    loginModal.classList.add("hidden");
+    loginForm.reset();
+    loginMessageDiv.classList.add("hidden");
+  });
+
+  // Close modal when clicking outside
+  loginModal.addEventListener("click", (e) => {
+    if (e.target === loginModal) {
+      loginModal.classList.add("hidden");
+      loginForm.reset();
+      loginMessageDiv.classList.add("hidden");
+    }
+  });
+
+  // Handle login form submission
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+
+    try {
+      const response = await fetch("/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // Login successful
+        isAdmin = true;
+        currentUsername = username;
+        loginMessageDiv.textContent = result.message;
+        loginMessageDiv.className = "success";
+        loginMessageDiv.classList.remove("hidden");
+
+        // Update UI
+        userIcon.textContent = "👨‍🏫"; // Change to teacher icon
+        adminPanel.classList.remove("hidden");
+        currentUserSpan.textContent = username;
+
+        // Close modal after 2 seconds
+        setTimeout(() => {
+          loginModal.classList.add("hidden");
+          loginForm.reset();
+          loginMessageDiv.classList.add("hidden");
+        }, 2000);
+      } else {
+        loginMessageDiv.textContent = result.detail || "Login failed";
+        loginMessageDiv.className = "error";
+        loginMessageDiv.classList.remove("hidden");
+      }
+    } catch (error) {
+      loginMessageDiv.textContent = "Failed to login. Please try again.";
+      loginMessageDiv.className = "error";
+      loginMessageDiv.classList.remove("hidden");
+      console.error("Error logging in:", error);
+    }
+  });
+
+  // Handle logout
+  logoutBtn.addEventListener("click", () => {
+    isAdmin = false;
+    currentUsername = null;
+    userIcon.textContent = "👤"; // Change back to student icon
+    adminPanel.classList.add("hidden");
+    messageDiv.classList.add("hidden");
+    fetchActivities(); // Refresh to update UI
+  });
 
   // Function to fetch activities from API
   async function fetchActivities() {
@@ -21,7 +118,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const spotsLeft =
           details.max_participants - details.participants.length;
 
-        // Create participants HTML with delete icons instead of bullet points
+        // Create participants HTML with delete icons only if admin
         const participantsHTML =
           details.participants.length > 0
             ? `<div class="participants-section">
@@ -30,7 +127,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span>${
+                        isAdmin
+                          ? `<button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button>`
+                          : ""
+                      }</li>`
                   )
                   .join("")}
               </ul>
@@ -69,6 +170,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Handle unregister functionality
   async function handleUnregister(event) {
+    event.preventDefault();
+    
+    // Only allow if admin
+    if (!isAdmin) {
+      messageDiv.textContent = "Only teachers can remove students. Please login first.";
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+      return;
+    }
+
     const button = event.target;
     const activity = button.getAttribute("data-activity");
     const email = button.getAttribute("data-email");
